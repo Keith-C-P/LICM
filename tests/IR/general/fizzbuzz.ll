@@ -13,19 +13,21 @@ declare i32 @printf(ptr, ...)
 
 define void @fizzbuzz(i32 %max) {
     entry:
-      br label %loop_entry
+      br label %loop_entry ; br -> branch (since its only 1 label, its uncondiitonal)
 
     loop_entry:
-      %i = phi i32 [1, %entry], [%new.i, %increment] 
-      %is_gt = icmp sgt i32 %i, %max
+      %i = phi i32 [1, %entry], [%new.i, %increment] ; phi -> join thing (read the paper)
+      %is_gt = icmp sgt i32 %i, %max ; icmp -> integer compare, sgt -> signed greater than
       br i1 %is_gt, label %exit, label %if_div_3
 
     if_div_3:
       %mod_3 = srem i32 %i, 3 ; srem -> signed remainder
-      %is_div_3 = icmp eq i32 %mod_3, 0 ; icmp -> integer compare
+      %is_div_3 = icmp eq i32 %mod_3, 0 ; icmp -> integer compare, eq -> equals
       br i1 %is_div_3, label %print_fizz, label %if_div_5 
       ; br -> branch
       ; i1 -> 1 bit
+      ; 1st is "if true"
+      ; 2nd is "if false"
 
     print_fizz:
       %call.0 = call i32 (ptr, ...) @printf(ptr @.str_fizz)
@@ -59,7 +61,6 @@ define void @fizzbuzz(i32 %max) {
 }
 
 define i32 @main() {
-    ; Call printf passing the pointer to our string constant
     call void @fizzbuzz(i32 100)
     ret i32 0
 }
