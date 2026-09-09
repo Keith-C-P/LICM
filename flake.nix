@@ -13,6 +13,9 @@
           pkgs.cmake
           pkgs.ninja
         ];
+        shellHook = ''
+          export NIX_HARDENING_ENABLE="$(echo $NIX_HARDENING_ENABLE | sed 's/fortify//')"
+          '';
       };
     };
 }
