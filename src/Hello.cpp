@@ -34,7 +34,7 @@ PassPluginLibraryInfo llvmGetPassPluginInfo() {
                    FunctionPassManager &FPM,
                    ArrayRef<PassBuilder::PipelineElement>) {
 
-                    if (Name == "hello") {
+                    if (Name == "Hello") {
                         FPM.addPass(HelloPass());
                         return true;
                     }
