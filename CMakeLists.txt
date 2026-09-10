@@ -23,19 +23,28 @@ execute_process(COMMAND ${LLVM_CONFIG_EXE} --system-libs
 
 message(STATUS "LLVM include dir: ${LLVM_INCLUDE_DIR}")
 
-add_library(pass MODULE
-    src/Hello.cpp
+file(GLOB_RECURSE PASSES
+    "${CMAKE_SOURCE_DIR}/src/*.cpp"
 )
 
-set_target_properties(pass PROPERTIES PREFIX "")
-target_compile_features(pass PRIVATE cxx_std_17)
-target_include_directories(pass PRIVATE ${LLVM_INCLUDE_DIR})
+foreach(PASS ${PASSES})
+  cmake_path(GET PASS FILENAME PASS_FILE)
+  cmake_path(GET PASS_FILE STEM PASS_NAME)
 
-separate_arguments(LLVM_CXX_FLAGS_LIST UNIX_COMMAND "${LLVM_CXX_FLAGS}")
+  add_library(${PASS_NAME}_pass MODULE
+    ${PASS}
+  )
 
-target_compile_options(pass PRIVATE ${LLVM_CXX_FLAGS_LIST})
-target_link_options(pass PRIVATE ${LLVM_LD_FLAGS})
-target_link_libraries(pass PRIVATE ${LLVM_SYSTEM_LIBS})
+  target_compile_features(${PASS_NAME}_pass PRIVATE cxx_std_17)
+  target_include_directories(${PASS_NAME}_pass PRIVATE ${LLVM_INCLUDE_DIR})
+
+  separate_arguments(LLVM_CXX_FLAGS_LIST UNIX_COMMAND "${LLVM_CXX_FLAGS}")
+
+  target_compile_options(${PASS_NAME}_pass PRIVATE ${LLVM_CXX_FLAGS_LIST})
+  target_link_options(${PASS_NAME}_pass PRIVATE ${LLVM_LD_FLAGS})
+  target_link_libraries(${PASS_NAME}_pass PRIVATE ${LLVM_SYSTEM_LIBS})
+
+endforeach()
 
 file(GLOB_RECURSE C_TESTS
     "${CMAKE_SOURCE_DIR}/tests/C/*.c"
@@ -45,78 +54,88 @@ file(GLOB_RECURSE IR_TESTS
     "${CMAKE_SOURCE_DIR}/tests/IR/*.ll"
 )
 
+file(GLOB_RECURSE PASSES
+    "${CMAKE_SOURCE_DIR}/src/*.cpp"
+)
+
 add_custom_target(test-c)
-
-foreach(C_TEST ${C_TESTS})
-
-  get_filename_component(TEST_NAME
-    ${C_TEST}
-    NAME_WE
-  )
-
-  add_custom_target(
-    test-c-${TEST_NAME}
-
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-    ${CMAKE_BINARY_DIR}/test-results/C
-
-    COMMAND ${CLANG_EXE}
-    -S
-    -emit-llvm
-    -O0
-    -Xclang -disable-O0-optnone
-    -Wno-\#warnings
-    ${C_TEST}
-    -o ${CMAKE_BINARY_DIR}/test-results/C/${TEST_NAME}.ll
-
-    COMMAND ${OPT_EXE}
-    -load-pass-plugin $<TARGET_FILE:pass>
-    -passes="hello"
-    ${CMAKE_BINARY_DIR}/test-results/C/${TEST_NAME}.ll
-    -S
-    -o ${CMAKE_BINARY_DIR}/test-results/C/${TEST_NAME}.out.ll
-
-    DEPENDS pass
-
-    COMMENT "Running LLVM pass on ${TEST_NAME}.c"
-  )
-
-  add_dependencies(test-c test-c-${TEST_NAME})
-
-endforeach()
-
 add_custom_target(test-ir)
 
-foreach(IR_TEST ${IR_TESTS})
+foreach(PASS ${PASSES})
+  cmake_path(GET PASS FILENAME PASS_FILE)
+  cmake_path(GET PASS_FILE STEM PASS_NAME)
+  message(STATUS "PASS NAME: ${PASS_NAME}")
 
-  get_filename_component(TEST_NAME
-    ${IR_TEST}
-    NAME_WE
-  )
+  foreach(C_TEST ${C_TESTS})
 
-  cmake_path(GET IR_TEST PARENT_PATH TEST_PARENT_DIR)
-  cmake_path(GET TEST_PARENT_DIR FILENAME TEST_PARENT_DIR_NAME)
+    get_filename_component(TEST_NAME
+      ${C_TEST}
+      NAME_WE
+    )
 
-  add_custom_target(
-    test-ir-${TEST_PARENT_DIR_NAME}-${TEST_NAME}
+    add_custom_target(
+      test-c-${TEST_NAME}-${PASS_NAME}
 
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-    ${CMAKE_BINARY_DIR}/test-results/IR
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+      ${CMAKE_BINARY_DIR}/test-results/C
 
-    COMMAND ${OPT_EXE}
-    -load-pass-plugin $<TARGET_FILE:pass>
-    -passes="hello"
-    ${IR_TEST}
-    -S
-    -o ${CMAKE_BINARY_DIR}/test-results/IR/${TEST_NAME}.out.ll
+      COMMAND ${CLANG_EXE}
+      -S
+      -emit-llvm
+      -O0
+      -Xclang -disable-O0-optnone
+      -Wno-\#warnings
+      ${C_TEST}
+      -o ${CMAKE_BINARY_DIR}/test-results/C/${TEST_NAME}.ll
 
-    DEPENDS pass
+      COMMAND ${OPT_EXE}
+      -load-pass-plugin $<TARGET_FILE:${PASS_NAME}_pass>
+      -passes="${PASS_NAME}"
+      ${CMAKE_BINARY_DIR}/test-results/C/${TEST_NAME}.ll
+      -S
+      -o ${CMAKE_BINARY_DIR}/test-results/C/${TEST_NAME}.out.ll
 
-    COMMENT "Running LLVM pass on ${TEST_NAME}.ll"
-  )
+      DEPENDS ${PASS_NAME}_pass
 
-  add_dependencies(test-ir test-ir-${TEST_PARENT_DIR_NAME}-${TEST_NAME})
+      COMMENT "Running LLVM ${PASS_NAME} pass on ${TEST_NAME}.c"
+    )
 
+    add_dependencies(test-c test-c-${TEST_NAME}-${PASS_NAME})
+
+  endforeach()
+
+
+  foreach(IR_TEST ${IR_TESTS})
+
+    get_filename_component(TEST_NAME
+      ${IR_TEST}
+      NAME_WE
+    )
+
+    cmake_path(GET IR_TEST PARENT_PATH TEST_PARENT_DIR)
+    cmake_path(GET TEST_PARENT_DIR FILENAME TEST_PARENT_DIR_NAME)
+
+    add_custom_target(
+      test-ir-${TEST_PARENT_DIR_NAME}-${TEST_NAME}-${PASS_NAME}
+
+      COMMAND ${CMAKE_COMMAND} -E make_directory
+      ${CMAKE_BINARY_DIR}/test-results/IR
+
+      COMMAND ${OPT_EXE}
+      -load-pass-plugin $<TARGET_FILE:${PASS_NAME}_pass>
+      -passes="${PASS_NAME}"
+      ${IR_TEST}
+      -S
+      -o ${CMAKE_BINARY_DIR}/test-results/IR/${TEST_NAME}.out.ll
+
+      DEPENDS ${PASS_NAME}_pass
+
+      COMMENT "Running ${PASS_NAME} pass on ${TEST_NAME}.ll"
+    )
+
+    add_dependencies(test-ir test-ir-${TEST_PARENT_DIR_NAME}-${TEST_NAME}-${PASS_NAME})
+
+  endforeach()
 endforeach()
 
 add_custom_target(test)
