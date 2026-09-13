@@ -10,7 +10,7 @@ Loop Invariant Code Motion, which moves "Loop Invariant" code out side of loops 
 $ nix develop
 ```
 
-3. Build & Test
+3. Build
 ```bash
 $ cmake -S . -B build -G Ninja
 ```
